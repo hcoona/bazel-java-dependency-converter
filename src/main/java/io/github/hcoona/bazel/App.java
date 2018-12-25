@@ -17,6 +17,7 @@ import java.util.Collections;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.StringJoiner;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -79,6 +80,15 @@ public final class App {
         LOG.info("{} {}", entry.getKey(), entry.getValue());
       }
     }
+  }
+
+  private static String getMavenCentralPomUrl(String groupId, String artifactId, String version) {
+    String path = new StringJoiner("/")
+        .add(groupId.replaceAll("\\.", "/"))
+        .add(artifactId.replaceAll("\\.", "/"))
+        .add(version)
+        .toString();
+    return "http://central.maven.org/maven2/" + path;
   }
 
   private static Stream<Dependency> visitDependencies(Path path) {
