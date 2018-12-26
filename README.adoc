@@ -1,0 +1,120 @@
+= Bazel Java Dependency Converter
+Shuai Zhang <zhangshuai.ustc@gmail.com>
+v1.0, 2018/12/25
+:graphvizdot: /usr/local/opt/graphviz/bin/dot
+:url-migrating-tool: https://github.com/bazelbuild/migration-tooling
+:url-bazel-deps: https://github.com/johnynek/bazel-deps
+:url-repositories-bzl: https://github.com/grpc/grpc-java/blob/master/repositories.bzl
+:url-starlark: https://github.com/bazelbuild/starlark
+
+Bazel force people to specify dependencies explicitly. This is good to spot some version conflicts but a heavy burden without tool supporting.
+
+The official link:{url-migrating-tool}[migrating tool] for Maven is deprecated, while its alternative link:https://github.com/johnynek/bazel-deps[bazel-deps] didn't support Maven project smoothly. That's why I need to write this project.
+
+== Motivation
+
+Read the origin dependency definition from either of following:
+
+. Maven project
+. Plain standalone POM file
+. link:{url-bazel-deps}[bazel-deps] YAML format
+. Well designed compact configuration format
+
+It also should accept an extra configuration file to make decisions automatically for conflicts, excluding, etc.
+
+It should produce a well-formatted link:{url-starlark}[Starlark] file like the grpc-java project link:{url-repositories-bzl}[repositories.bzl] file, supporting omit the dependencies by parameters.
+
+== High level design
+
+=== Workflow
+
+[graphviz,svg]
+....
+digraph G {
+  MavenProject -> SeedDependencies
+  PomFile -> SeedDependencies
+  YamlFile -> SeedDependencies
+
+  MavenRepository -> MultiversionSeedDependencies
+  SeedDependencies -> MultiversionSeedDependencies [label = "Discover transition dependency conflicts"]
+
+  AdditionInformation -> WellDefinedSeedDependencies
+  MultiversionSeedDependencies -> WellDefinedSeedDependencies [label = "Resolve conflicts"]
+
+  MavenRepository -> WellDefinedAllDependencies
+  WellDefinedSeedDependencies -> WellDefinedAllDependencies [label = "Include transition dependencies"]
+
+  WellDefinedAllDependencies -> StarlarkFiles [label = "Generation"]
+}
+....
+
+=== Discover Transition Dependency
+
+We can discover transition dependency according to the POM description file uploaded on Maven repository. For example, http://central.maven.org/maven2/org/apache/commons/commons-configuration2/2.4/commons-configuration2-2.4.pom.
+
+=== Resolve Conflicts
+
+An artifact dependency could have many versions because we included transition dependencies. The conflict resolving process should be as automatically as possible, but still safe enough.
+
+. No version given (should we allow it?), use the latest stable version
+. One version given, use it
+. Multiple versions given, use the higher one
+
+=== Starlark File
+
+Assume we are generate starlark file for following dependencies:
+
+----
+'com.google.inject:guice:jar:4.2.2'
+'com.google.guava:guava:jar:27.0.1-jre'
+'org.apache.commons:commons-lang3:jar:3.8.1'
+'org.apache.commons:commons-configuration2:jar:2.4'
+----
+
+The generated starlark file could be as following:
+
+[source,python]
+----
+def maven_repositories(
+  omit_com_google_inject_guice_repositories = False,
+  omit_com_google_guava_guava_repositories = False,
+  omit_org_apache_commons_commons_lang3 = False, # No transition dependencies
+  omit_org_apache_commons_commons_configuration2_repositories = False):
+  if not omit_com_google_inject_guice_repositories:
+    com_google_inject_guice_repositories()
+  if not omit_com_google_guava_guava_repositories:
+    com_google_guava_guava_repositories()
+  if not omit_org_apache_commons_commons_lang3:
+    org_apache_commons_commons_lang3()
+  if not omit_org_apache_commons_commons_configuration2_repositories:
+    org_apache_commons_commons_configuration2_repositories()
+
+def com_google_inject_guice_repositories(
+  omit_com_google_inject_guice = False,
+  omit_aopalliance_aopalliance = False,
+  omit_optional_clib_clib = True, # optional dependency
+  omit_com_google_guava_guava = True, # provided by 'com.google.guava:guava:jar:27.0.1-jre'
+  # transition dependencies of guava
+  omit_javax_inject_javax_inject = False,
+  omit_optional_org_ow2_asm_asm = True): # optional dependency
+  if not omit_com_google_inject_guice:
+    com_google_inject_guice()
+  if not omit_aopalliance_aopalliance:
+    aopalliance_aopalliance()
+  if not omit_optional_clib_clib:
+    optional_clib_clib
+  if not omit_com_google_guava_guava():
+    com_google_guava_guava_repositories(
+      ) # transition dependencies of guava
+  # ...
+
+def com_google_inject_guice():
+  native.maven_jar(
+    name = "com_google_inject_guice",
+    artifact = "com.google.inject:guice:4.2.2",
+    sha1 = "6dacbe18e5eaa7f6c9c36db33b42e7985e94ce77", # http://central.maven.org/maven2/com/google/inject/guice/4.2.2/guice-4.2.2.jar.sha1
+    sha1_src = "ffd85e2a6ab1f015b16fc766ced990fd260024a4", # http://central.maven.org/maven2/com/google/inject/guice/4.2.2/guice-4.2.2-sources.jar.sha1
+  )
+
+# ...
+----
