@@ -26,13 +26,12 @@ import java.util.stream.Stream;
  */
 public final class App {
   private static final Logger LOG = LoggerFactory.getLogger(App.class);
-  private static final String PROJECT_ROOT = "/Users/shuaiz/GitEnlistments/Hadoop";
 
   private App() {
   }
 
   public static void main(String[] args) {
-    Path projectRootPath = Paths.get(PROJECT_ROOT);
+    Path projectRootPath = Paths.get("").toAbsolutePath();
 
     Map<String, String> properties = visitProperties(projectRootPath).collect(Collectors.toMap(
         entry -> entry.getKey().toString(),
