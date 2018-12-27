@@ -15,7 +15,7 @@ public class MavenDependency {
 
   public static MavenDependency createProject(
     String groupId, String artifactId) {
-    return createProject(groupId, artifactId);
+    return createProject(groupId, artifactId, null);
   }
 
   public static MavenDependency createProject(
