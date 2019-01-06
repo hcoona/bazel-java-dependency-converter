@@ -118,3 +118,9 @@ def com_google_inject_guice():
 
 # ...
 ----
+
+== Conflicts resolving is subtle
+
+Whenever resolving conflicts, we choose a version for the conflicted dependencies, which would actually inflect a chain of transition dependencies. It could increase (if we assign a new version to resolve the conflict) or decrease the conflicts.
+
+Assume there is a super seed as the only parent of all seed dependencies. We call this node root. The resolving should start from the top most (closest to the root) node.
